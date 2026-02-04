@@ -1,5 +1,6 @@
-package org.firstinspires.ftc.teamcode.components;
+package org.firstinspires.ftc.teamcode.system;
 
+import com.arcrobotics.ftclib.controller.PIDFController;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
@@ -30,6 +31,8 @@ public class DifferentialSwerveModule {
     private final double MOTOR_TO_DIFFERENTIAL_GEAR_RATIO = 4;
     private final double MAX_MOTOR_VELOCITY = 2800;
 
+    private final PIDFController angleController;
+
     private double wantedAngle;
     private double topMotorVelocity;
     private double bottomMotorVelocity;
@@ -47,11 +50,14 @@ public class DifferentialSwerveModule {
         topMotor.setDirection(DcMotorEx.Direction.REVERSE);
         bottomMotor.setDirection(DcMotorEx.Direction.REVERSE);
 
-        topMotor.setVelocity(0);
-        bottomMotor.setVelocity(0);
+        topMotor.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
+        bottomMotor.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
 
         this.topMotor = topMotor;
         this.bottomMotor = bottomMotor;
+
+        angleController = new PIDFController(1, 0, 0, 0);
+        angleController.reset();
 
         this.x = x;
         this.y = y;
@@ -60,6 +66,20 @@ public class DifferentialSwerveModule {
 
         turnDirX = -y / rotationCenterDist;
         turnDirY = x / rotationCenterDist;
+    }
+
+    public void setAnglePIDF(
+            double p,
+            double i,
+            double d,
+            double f
+    ) {
+        angleController.setPIDF(p, i, d, f);
+        angleController.reset();
+    }
+
+    public void resetPIDF() {
+        angleController.reset();
     }
 
     public double getAngle() {
@@ -76,7 +96,7 @@ public class DifferentialSwerveModule {
     public void setSpeed(
             double speed
     ) {
-        double wheelRPS = speed / WHEEL_RADIUS;
+        double wheelRPS = speed / (2 * Math.PI * WHEEL_RADIUS);
         double differentialGearRPS = wheelRPS * DIFFERENTIAL_TO_WHEEL_GEAR_RATIO;
         double motorRPS = differentialGearRPS * MOTOR_TO_DIFFERENTIAL_GEAR_RATIO;
         double motorVel = motorRPS * COUNTS_PER_REVOLUTION;
@@ -108,7 +128,7 @@ public class DifferentialSwerveModule {
     }
 
     public void drive() {
-        double correction = normalize(wantedAngle - getAngle());
+        double correction = angleController.calculate(0, normalize(wantedAngle - getAngle()));
         double correctedTopVelocity = topMotorVelocity + correction;
         double correctedBottomVelocity = bottomMotorVelocity + correction;
 
@@ -124,7 +144,9 @@ public class DifferentialSwerveModule {
         bottomMotor.setVelocity(correctedBottomVelocity);
     }
 
-    private static double normalize(double degrees) {
+    private static double normalize(
+            double degrees
+    ) {
         double normalizedAngle = degrees;
         while (normalizedAngle > 180) normalizedAngle -= 360;
         while (normalizedAngle <= -180) normalizedAngle += 360;
